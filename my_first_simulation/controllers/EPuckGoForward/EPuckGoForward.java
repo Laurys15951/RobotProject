@@ -9,44 +9,99 @@
 //  import com.cyberbotics.webots.controller.Motor;
 import com.cyberbotics.webots.controller.Robot;
 import com.cyberbotics.webots.controller.Motor;
+import com.cyberbotics.webots.controller.Accelerometer;
+
 
 
 // Here is the main class of your controller.
 // This class defines how to initialize and how to run your controller.
 public class EPuckGoForward {
 
-  // This is the main function of your controller.
-  // It creates an instance of your Robot instance and
-  // it uses its function(s).
-  // Note that only one instance of Robot should be created in
-  // a controller program.
-  // The arguments of the main function can be specified by the
-  // "controllerArgs" field of the Robot node
   public static void main(String[] args) {
 
+    int TIME_STEP = 64;
+    
+    System.out.println("start");
+    
+    double MAX_SPEED = 6.28;
     // create the Robot instance.
     Robot robot = new Robot();
 
-    // get the time step of the current world.
-    int timeStep = (int) Math.round(robot.getBasicTimeStep());
-
-    // You should insert a getDevice-like function in order to get the
-    // instance of a device of the robot. Something like:
-    //  Motor motor = robot.getMotor("motorname");
-    //  DistanceSensor ds = robot.getDistanceSensor("dsname");
-    //  ds.enable(timeStep);
-
+   // get a handler to the motors and set target position to infinity (speed control)
+   Motor leftMotor = robot.getMotor("left wheel motor");
+   Motor rightMotor = robot.getMotor("right wheel motor");
+   leftMotor.setPosition(Double.POSITIVE_INFINITY);
+   rightMotor.setPosition(Double.POSITIVE_INFINITY);
+   
+   // set up the motor speeds at 10% of the MAX_SPEED.
+   leftMotor.setVelocity(0.1 * MAX_SPEED);
+   rightMotor.setVelocity(0.1 * MAX_SPEED);
+   
+   //create position sensor instances
+   var left_ps = robot.getPositionSensor("left wheel sensor");
+   left_ps.enable(TIME_STEP);
+   var right_ps = robot.getPositionSensor("right wheel sensor");
+   right_ps.enable(TIME_STEP);
+   
+   double[]target = {0.25,0};
+   double approx = 0.005;
+   double[] psValues = {0,0};
+   double[] lastPsValues = {0,0};
+   double[] distTraveled = {0,0};
+   
+   double wheelRadius = 0.0205;
+   double distBetweenWheels = 0.052;
+   double wheelCirum = 2*3.14*wheelRadius;
+   double encoderUnit = wheelCirum/6.28;
+   
+   //robot pose
+   double[] robotPose={0,0,0};//x,y,theta
+      
     // Main loop:
     // - perform simulation steps until Webots is stopping the controller
-    while (robot.step(timeStep) != -1) {
-      // Read the sensors:
-      // Enter here functions to read sensor data, like:
-      //  double val = ds.getValue();
-
+    while (robot.step(TIME_STEP) != -1) {
+      
+      // Read the position sensors:
+      psValues[0] = left_ps.getValue();
+      psValues[1] = right_ps.getValue();
+         
       // Process sensor data here.
-
+      for(int i = 0; i < 2; i++){
+        double diff = psValues[i] - lastPsValues[i];
+        if(Math.abs(diff) < 0.001){
+          diff = 0;
+          psValues[i] = lastPsValues[i];
+        }
+        distTraveled[i] = diff * encoderUnit;
+      }
+      
+      //compute linear and angular velocity
+      double v=(distTraveled[0]+distTraveled[1])/2.0;
+      double w=(distTraveled[0]-distTraveled[1])/distBetweenWheels;
+      
+      double dt = 1;
+      robotPose[2] += (w*dt);
+      
+      double vx = v*Math.cos(robotPose[2]);
+      double vy = v*Math.sin(robotPose[2]);
+      
+      robotPose[0] += (vx*dt);
+      robotPose[1] += (vy*dt);
+      System.out.println(robotPose[0]+" "+robotPose[1]);
       // Enter here functions to send actuator commands, like:
       //  motor.setPosition(10.0);
+      if(robotPose[0] > target[0] - approx &&
+        robotPose[0] < target[0] + approx &&
+        robotPose[1] > target[1] - approx &&
+        robotPose[1] < target[1] + approx){
+          leftMotor.setVelocity(0);
+          rightMotor.setVelocity(0);
+      }
+      
+      for(int i = 0; i < 2; i++){
+        lastPsValues[i] = psValues[i];
+      }
+      
     };
 
     // Enter here exit cleanup code.
