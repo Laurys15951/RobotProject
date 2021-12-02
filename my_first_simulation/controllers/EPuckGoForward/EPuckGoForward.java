@@ -43,8 +43,9 @@ public class EPuckGoForward {
    var right_ps = robot.getPositionSensor("right wheel sensor");
    right_ps.enable(TIME_STEP);
    
-   double[]target = {0.25,0};
-   double approx = 0.005;
+   double[]target = {0.625,0.25};
+   double targetEpsilon = 0.005;
+
    double[] psValues = {0,0};
    double[] lastPsValues = {0,0};
    double[] distTraveled = {0,0};
@@ -57,6 +58,8 @@ public class EPuckGoForward {
    //robot pose
    double[] robotPose={0,0,0};//x,y,theta
       
+    double targetDir = Math.tan(target[1]-robotPose[1]/target[0]-robotPose[0]);
+    double targetDirEpsilon = 0.02;
     // Main loop:
     // - perform simulation steps until Webots is stopping the controller
     while (robot.step(TIME_STEP) != -1) {
@@ -81,19 +84,38 @@ public class EPuckGoForward {
       
       double dt = 1;
       robotPose[2] += (w*dt);
+      robotPose[2] =robotPose[2]%(2*Math.PI);
       
       double vx = v*Math.cos(robotPose[2]);
       double vy = v*Math.sin(robotPose[2]);
       
       robotPose[0] += (vx*dt);
       robotPose[1] += (vy*dt);
-      System.out.println(robotPose[0]+" "+robotPose[1]);
+      //System.out.println(robotPose[0]+" "+robotPose[1]+" "+robotPose[2]);
+      
+      targetDir = Math.atan((target[1]-robotPose[1])/(target[0]-robotPose[0]));
+      //System.out.println(targetDir+" "+robotPose[2]);
       // Enter here functions to send actuator commands, like:
       //  motor.setPosition(10.0);
-      if(robotPose[0] > target[0] - approx &&
-        robotPose[0] < target[0] + approx &&
-        robotPose[1] > target[1] - approx &&
-        robotPose[1] < target[1] + approx){
+      if(false){//avoidingObsticles
+      
+      }else if(!((targetDir+targetDirEpsilon>robotPose[2])&&(targetDir-targetDirEpsilon<robotPose[2]))){//turning to target
+          if((targetDir-robotPose[2])>0){//turn right
+            leftMotor.setVelocity(0.1*MAX_SPEED);
+            rightMotor.setVelocity(-0.1*MAX_SPEED);
+          }else{//turn left
+            leftMotor.setVelocity(-0.1*MAX_SPEED);
+            rightMotor.setVelocity(0.1*MAX_SPEED);
+          } 
+       }else if(true){//go straight
+          leftMotor.setVelocity(0.5*MAX_SPEED);
+          rightMotor.setVelocity(0.5*MAX_SPEED);
+      }
+      
+      if(robotPose[0] > target[0] - targetEpsilon &&
+        robotPose[0] < target[0] + targetEpsilon &&
+        robotPose[1] > target[1] - targetEpsilon &&
+        robotPose[1] < target[1] + targetEpsilon){
           leftMotor.setVelocity(0);
           rightMotor.setVelocity(0);
       }

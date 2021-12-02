@@ -3,8 +3,8 @@ WorldInfo {
   coordinateSystem "NUE"
 }
 Viewpoint {
-  orientation 0.07715454608444433 0.9696256557535835 0.23210614753370218 3.7390625273368863
-  position -0.6153095607868329 0.6404912102367575 -0.8446159877126899
+  orientation -0.9999082494264818 -0.013533497611931688 -0.0005806644955896253 1.0319658754293057
+  position -0.062132946574395866 1.1483641281319013 0.8994909482878811
 }
 TexturedBackground {
 }
@@ -13,24 +13,32 @@ TexturedBackgroundLight {
 RectangleArena {
   floorTileSize 0.25 0.25
 }
-WoodenBox {
-  translation 0.116965 0.05 -0.197768
-  rotation 0 1 0 1.309
-  name "wooden box(1)"
-  size 0.1 0.1 0.1
-}
-WoodenBox {
-  translation -0.254746 0.05 0.0851644
-  rotation 0 1 0 -0.523595307179586
-  size 0.1 0.1 0.1
-  mass 0.4
-}
 E-puck {
+  translation -0.06 0 0.31
   controller "EPuckGoForward"
 }
 WoodenBox {
-  translation 0.283378 0.05 0.257495
-  rotation 0 1 0 0.523599
+  translation 0.1875 0.06 0.312495
   name "wooden box(2)"
-  size 0.1 0.1 0.1
+  size 0.125 0.125 0.125
+}
+WoodenBox {
+  translation -0.3125 0.06 0.312495
+  name "wooden box(1)"
+  size 0.125 0.125 0.125
+}
+WoodenBox {
+  translation 0.1875 0.06 0.062495
+  name "wooden box(3)"
+  size 0.125 0.125 0.125
+}
+WoodenBox {
+  translation -0.0625 0.06 -0.187505
+  name "wooden box(4)"
+  size 0.125 0.125 0.125
+}
+WoodenBox {
+  translation -0.3125 0.06 -0.187505
+  name "wooden box(5)"
+  size 0.125 0.125 0.125
 }
