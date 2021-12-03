@@ -9,7 +9,7 @@
 //  import com.cyberbotics.webots.controller.Motor;
 import com.cyberbotics.webots.controller.Robot;
 import com.cyberbotics.webots.controller.Motor;
-import com.cyberbotics.webots.controller.Accelerometer;
+import com.cyberbotics.webots.controller.DistanceSensor;
 
 
 
@@ -26,58 +26,87 @@ public class EPuckGoForward {
     double MAX_SPEED = 6.28;
     // create the Robot instance.
     Robot robot = new Robot();
+    
+    // initialize devices
+    DistanceSensor[] ps = new DistanceSensor[8];
+    String[] psNames = {
+      "ps0", "ps1", "ps2", "ps3",
+      "ps4", "ps5", "ps6", "ps7"
+    };
+    
+    for (int i = 0; i < 8; i++) {
+      ps[i] = robot.getDistanceSensor(psNames[i]);
+      ps[i].enable(TIME_STEP);
+    }
+    
+    
+    // get a handler to the motors and set target position to infinity (speed control)
+    Motor leftMotor = robot.getMotor("left wheel motor");
+    Motor rightMotor = robot.getMotor("right wheel motor");
+    leftMotor.setPosition(Double.POSITIVE_INFINITY);
+    rightMotor.setPosition(Double.POSITIVE_INFINITY);
+   
+    // set up the motor speeds at 10% of the MAX_SPEED.
+    leftMotor.setVelocity(0.1 * MAX_SPEED);
+    rightMotor.setVelocity(0.1 * MAX_SPEED);
+   
+    //create position sensor instances
+    var left_ps = robot.getPositionSensor("left wheel sensor");
+    left_ps.enable(TIME_STEP);
+    var right_ps = robot.getPositionSensor("right wheel sensor");
+    right_ps.enable(TIME_STEP);
+   
+    double[]target = {0.625,0}; //------target here
+    double targetEpsilon = 0.005;
 
-   // get a handler to the motors and set target position to infinity (speed control)
-   Motor leftMotor = robot.getMotor("left wheel motor");
-   Motor rightMotor = robot.getMotor("right wheel motor");
-   leftMotor.setPosition(Double.POSITIVE_INFINITY);
-   rightMotor.setPosition(Double.POSITIVE_INFINITY);
+    double[] wheelValues = {0,0};
+    double[] lastWheelValues = {0,0};
+    double[] distTraveled = {0,0};
    
-   // set up the motor speeds at 10% of the MAX_SPEED.
-   leftMotor.setVelocity(0.1 * MAX_SPEED);
-   rightMotor.setVelocity(0.1 * MAX_SPEED);
+    double wheelRadius = 0.0205;
+    double distBetweenWheels = 0.052;
+    double wheelCirum = 2*3.14*wheelRadius;
+    double encoderUnit = wheelCirum/6.28;
    
-   //create position sensor instances
-   var left_ps = robot.getPositionSensor("left wheel sensor");
-   left_ps.enable(TIME_STEP);
-   var right_ps = robot.getPositionSensor("right wheel sensor");
-   right_ps.enable(TIME_STEP);
-   
-   double[]target = {0.625,0.25};
-   double targetEpsilon = 0.005;
-
-   double[] psValues = {0,0};
-   double[] lastPsValues = {0,0};
-   double[] distTraveled = {0,0};
-   
-   double wheelRadius = 0.0205;
-   double distBetweenWheels = 0.052;
-   double wheelCirum = 2*3.14*wheelRadius;
-   double encoderUnit = wheelCirum/6.28;
-   
-   //robot pose
-   double[] robotPose={0,0,0};//x,y,theta
+    //robot pose
+    double[] robotPose={0,0,0};//x,y,theta
       
     double targetDir = Math.tan(target[1]-robotPose[1]/target[0]-robotPose[0]);
     double targetDirEpsilon = 0.02;
+    
+    int closeToObsticle = 0;
     // Main loop:
     // - perform simulation steps until Webots is stopping the controller
     while (robot.step(TIME_STEP) != -1) {
-      
+        
       // Read the position sensors:
-      psValues[0] = left_ps.getValue();
-      psValues[1] = right_ps.getValue();
-         
+      wheelValues[0] = left_ps.getValue();
+      wheelValues[1] = right_ps.getValue();
+      
+      double[] psValues = {0, 0, 0, 0, 0, 0, 0, 0};
+      for (int i = 0; i < 8 ; i++){
+        psValues[i] = ps[i].getValue();
+        //System.out.print(psValues[i]+" ");
+      }
+      System.out.println();
       // Process sensor data here.
       for(int i = 0; i < 2; i++){
-        double diff = psValues[i] - lastPsValues[i];
+        double diff = wheelValues[i] - lastWheelValues[i];
         if(Math.abs(diff) < 0.001){
           diff = 0;
-          psValues[i] = lastPsValues[i];
+          wheelValues[i] = lastWheelValues[i];
         }
         distTraveled[i] = diff * encoderUnit;
       }
       
+      // detect obstacles
+      boolean right_obstacle =
+        psValues[0] > 80.0 ||
+        psValues[1] > 80.0;
+      boolean left_obstacle =
+        psValues[5] > 80.0 ||
+        psValues[6] > 80.0;
+      System.out.println(right_obstacle+" "+left_obstacle);
       //compute linear and angular velocity
       double v=(distTraveled[0]+distTraveled[1])/2.0;
       double w=(distTraveled[0]-distTraveled[1])/distBetweenWheels;
@@ -97,8 +126,22 @@ public class EPuckGoForward {
       //System.out.println(targetDir+" "+robotPose[2]);
       // Enter here functions to send actuator commands, like:
       //  motor.setPosition(10.0);
-      if(false){//avoidingObsticles
-      
+      if(left_obstacle||right_obstacle || closeToObsticle>0){//avoidingObsticles
+        if(closeToObsticle<1)
+          closeToObsticle = 30;
+        leftMotor.setVelocity(0.5*MAX_SPEED);
+        rightMotor.setVelocity(0.5*MAX_SPEED);
+        if (left_obstacle) {
+          // turn right
+          leftMotor.setVelocity(0.5*MAX_SPEED);
+          rightMotor.setVelocity(-0.5*MAX_SPEED);
+        }
+        else if (right_obstacle) {
+           // turn left
+           leftMotor.setVelocity(-0.5*MAX_SPEED);
+           rightMotor.setVelocity(0.5*MAX_SPEED);         
+         }
+         closeToObsticle--;
       }else if(!((targetDir+targetDirEpsilon>robotPose[2])&&(targetDir-targetDirEpsilon<robotPose[2]))){//turning to target
           if((targetDir-robotPose[2])>0){//turn right
             leftMotor.setVelocity(0.1*MAX_SPEED);
@@ -121,9 +164,9 @@ public class EPuckGoForward {
       }
       
       for(int i = 0; i < 2; i++){
-        lastPsValues[i] = psValues[i];
+        lastWheelValues[i] = wheelValues[i];
       }
-      
+    
     };
 
     // Enter here exit cleanup code.
