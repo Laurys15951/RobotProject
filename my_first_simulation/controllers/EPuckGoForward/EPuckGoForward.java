@@ -10,6 +10,7 @@
 import com.cyberbotics.webots.controller.Robot;
 import com.cyberbotics.webots.controller.Motor;
 import com.cyberbotics.webots.controller.DistanceSensor;
+import com.cyberbotics.webots.controller.Camera;
 
 
 
@@ -39,6 +40,10 @@ public class EPuckGoForward {
       ps[i].enable(TIME_STEP);
     }
     
+    //get camera
+    Camera camera = robot.getCamera("camera");
+    camera.enable(TIME_STEP);
+
     
     // get a handler to the motors and set target position to infinity (speed control)
     Motor leftMotor = robot.getMotor("left wheel motor");
@@ -75,6 +80,7 @@ public class EPuckGoForward {
     double targetDirEpsilon = 0.02;
     
     int closeToObsticle = 0;
+    boolean done = false;
     // Main loop:
     // - perform simulation steps until Webots is stopping the controller
     while (robot.step(TIME_STEP) != -1) {
@@ -102,11 +108,13 @@ public class EPuckGoForward {
       // detect obstacles
       boolean right_obstacle =
         psValues[0] > 80.0 ||
-        psValues[1] > 80.0;
+        psValues[1] > 80.0 ||
+        psValues[2] > 80.0;
       boolean left_obstacle =
-        psValues[5] > 80.0 ||
-        psValues[6] > 80.0;
-      System.out.println(right_obstacle+" "+left_obstacle);
+        psValues[7] > 80.0 ||
+        psValues[6] > 80.0 ||
+        psValues[5] > 80.0;
+      //System.out.println(right_obstacle+" "+left_obstacle);
       //compute linear and angular velocity
       double v=(distTraveled[0]+distTraveled[1])/2.0;
       double w=(distTraveled[0]-distTraveled[1])/distBetweenWheels;
@@ -131,7 +139,22 @@ public class EPuckGoForward {
           closeToObsticle = 30;
         leftMotor.setVelocity(0.5*MAX_SPEED);
         rightMotor.setVelocity(0.5*MAX_SPEED);
-        if (left_obstacle) {
+        int[] image = camera.getImage();
+        int pixel = image[image.length/2];
+        int r = Camera.pixelGetRed(pixel);
+        int g = Camera.pixelGetGreen(pixel);
+        int b = Camera.pixelGetBlue(pixel);
+        System.out.println("red=" + r + " green=" + g + " blue=" + b);
+
+        if(r>100&&(psValues[7] > 80.0 ||psValues[0] > 80.0)){
+          // turn right
+          leftMotor.setVelocity(0.5*MAX_SPEED);
+          rightMotor.setVelocity(-0.5*MAX_SPEED);
+        }else if(g >100&&(psValues[7] > 80.0 ||psValues[0] > 80.0)){
+           // turn left
+           leftMotor.setVelocity(-0.5*MAX_SPEED);
+           rightMotor.setVelocity(0.5*MAX_SPEED);         
+        }else if (left_obstacle) {
           // turn right
           leftMotor.setVelocity(0.5*MAX_SPEED);
           rightMotor.setVelocity(-0.5*MAX_SPEED);
@@ -161,12 +184,16 @@ public class EPuckGoForward {
         robotPose[1] < target[1] + targetEpsilon){
           leftMotor.setVelocity(0);
           rightMotor.setVelocity(0);
+          done = true;
       }
       
       for(int i = 0; i < 2; i++){
         lastWheelValues[i] = wheelValues[i];
       }
-    
+      if (done){
+        leftMotor.setVelocity(0);
+        rightMotor.setVelocity(0);
+      }
     };
 
     // Enter here exit cleanup code.
