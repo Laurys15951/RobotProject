@@ -3,8 +3,8 @@ WorldInfo {
   coordinateSystem "NUE"
 }
 Viewpoint {
-  orientation -0.493471851850503 0.6969371318337055 0.5203500415130603 1.9617915228132405
-  position 0.932765507928435 1.9740800440979536 -0.02211181204402196
+  orientation -0.430994558117355 0.8132761827984077 0.39092907459803605 1.6640063142368382
+  position 0.958640606227914 1.3107517552664538 0.15990163080065953
 }
 TexturedBackground {
 }
@@ -15,6 +15,7 @@ RectangleArena {
 }
 E-puck {
   translation -0.19 0 0.31
+  rotation 0 1 0 1.01503e-06
   controller "EPuckShortestPathRightCorners"
 }
 WoodenBox {

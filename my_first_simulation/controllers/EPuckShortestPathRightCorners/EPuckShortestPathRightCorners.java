@@ -4,11 +4,10 @@
 // Author:
 // Modifications:
 
-// You may need to add other webots classes such as
-//  import com.cyberbotics.webots.controller.DistanceSensor;
-//  import com.cyberbotics.webots.controller.Motor;
 import com.cyberbotics.webots.controller.Robot;
 import com.cyberbotics.webots.controller.Motor;
+import com.cyberbotics.webots.controller.DistanceSensor;
+import com.cyberbotics.webots.controller.Camera;
 import java.util.*;
 import java.io.*;
 
@@ -35,6 +34,23 @@ public class EPuckShortestPathRightCorners {
     // create the Robot instance.
     Robot robot = new Robot();
 
+    //get distance sensors
+    DistanceSensor[] ps = new DistanceSensor[8];
+    String[] psNames = {
+      "ps0", "ps1", "ps2", "ps3",
+      "ps4", "ps5", "ps6", "ps7"
+    };
+    
+    for (int i = 0; i < 8; i++) {
+      ps[i] = robot.getDistanceSensor(psNames[i]);
+      ps[i].enable(TIME_STEP);
+    }
+    
+    //get camera
+    Camera camera = robot.getCamera("camera");
+    camera.enable(TIME_STEP);
+
+    
     // get the motor devices
     Motor leftMotor = robot.getMotor("left wheel motor");
     Motor rightMotor = robot.getMotor("right wheel motor");
@@ -47,47 +63,93 @@ public class EPuckShortestPathRightCorners {
     left_ps.enable(TIME_STEP);
     var right_ps = robot.getPositionSensor("right wheel sensor");
     right_ps.enable(TIME_STEP);
-
+ 
+    //parameters to keep track of robot
     double[] wheelValues = {0,0};
     double[] lastWheelValues = {0,0};
+    double[] distTraveled = {0,0};
 
-    //square forward 
-    double forward = 6.24;
-    //leftMotor.setPosition(6.24);
-    //rightMotor.setPosition(6.24);
-    double turn = 2.4;
-    //leftMotor.setPosition(forward);
-    //rightMotor.setPosition(forward);
+    //robot parameters
+    double wheelRadius = 0.0205;
+    double distBetweenWheels = 0.052;
+    double wheelCirum = 2*Math.PI*wheelRadius;
+    double encoderUnit = wheelCirum/6.28;
+   
+    //robot pose
+    double[] robotPose={0,0,0};//x,y,theta
+      
+    //variables for counting return direction
+    double retDir;
+    double retDirEpsilon = 0.02;
     
-    int start =17;
+    int closeToObsticle = 0;
+    boolean done = false;
+
+
+    //sizes to move a square forward or turn 90 degrees
+    double forward = 6.24;
+    double turn = 2.4;
+     
+    //start and resting squares
+    int start = 17;
     int finish = 49;
     
-    //path algorithm
+    //Epsilon for return
+    double returnPointEpsilon = 0.06;
+
+   //path algorithm
     //Map graph
     int graph[][]=readData();
+    //distances array
     int[] minRoads =new int[64];
     for(int i = 0; i< 64; i++){
       minRoads[i] = -1;
     }
     minRoads[start] = -2;
+    
+    //computing shortest road with dijkstra
     ArrayList<Integer> road = dijkstra(graph, start, finish,minRoads);
     
-    
+    //logic variables for moving forward
     int botDir = 0;
     int step = 0;
     boolean turning = false;
     
-    
     // Main loop:
     // - perform simulation steps until Webots is stopping the controller
     while (robot.step(TIME_STEP) != -1) {
-      //System.out.println(left_ps.getValue()+" "+right_ps.getValue());
-      // Read the sensors:
-      // Enter here functions to read sensor data, like:
+      //Getting new wheel possition
       wheelValues[0] = left_ps.getValue();
       wheelValues[1] = right_ps.getValue();
 
-      // Process sensor data here.
+
+      // processing how musch wheels moved
+      for(int i = 0; i < 2; i++){
+        double diff = wheelValues[i] - lastWheelValues[i];
+        if(Math.abs(diff) < 0.001){
+          diff = 0;
+          wheelValues[i] = lastWheelValues[i];
+        }
+        distTraveled[i] = diff * encoderUnit;
+      }
+
+
+      //compute linear and angular velocity from how much wheels moved
+      double v=(distTraveled[0]+distTraveled[1])/2.0;
+      double w=(distTraveled[0]-distTraveled[1])/distBetweenWheels;
+      
+      double dt = 1;
+      robotPose[2] += (w*dt);
+      
+      double vx = v*Math.cos(robotPose[2]);
+      double vy = v*Math.sin(robotPose[2]);
+      
+      robotPose[0] += (vx*dt);
+      robotPose[1] += (vy*dt);
+      
+      //System.out.println(robotPose[0]+" "+robotPose[1]+" "+robotPose[2]);
+
+      // logic for moving towards rest spot acording to dijkstra commads
       if(lastWheelValues[0]==wheelValues[0]&&lastWheelValues[1]==wheelValues[1] && turning){
             leftMotor.setPosition(wheelValues[0]+forward);
             rightMotor.setPosition(wheelValues[1]+forward);
@@ -156,16 +218,134 @@ public class EPuckShortestPathRightCorners {
             }
             step++;
       }
-
-
-      // Enter here functions to send actuator commands, like:
-      //  motor.setPosition(10.0);
-      
       for(int i = 0; i < 2; i++){
         lastWheelValues[i] = wheelValues[i];
       }
     };
+    //waiting for ~10 seconds
+    int breaktime =0;
+    while (robot.step(TIME_STEP) != -1) {
+      if(breaktime>TIME_STEP*2.5)
+        break;
+      breaktime++;
+    };
 
+    //allowing motors to turn to infinity
+    leftMotor.setPosition(Double.POSITIVE_INFINITY);
+    rightMotor.setPosition(Double.POSITIVE_INFINITY);
+   
+    // stopping motors temporarily.
+    leftMotor.setVelocity(0);
+    rightMotor.setVelocity(0);
+
+    //returning to starting point
+    while (robot.step(TIME_STEP) != -1) {
+      // Read the position sensors:
+      wheelValues[0] = left_ps.getValue();
+      wheelValues[1] = right_ps.getValue();
+      
+      //getting distance sensors values
+      double[] psValues = {0, 0, 0, 0, 0, 0, 0, 0};
+      for (int i = 0; i < 8 ; i++){
+        psValues[i] = ps[i].getValue();
+        //System.out.print(psValues[i]+" ");
+      }
+      //System.out.println();
+      
+      // processing how musch wheels moved
+      for(int i = 0; i < 2; i++){
+        double diff = wheelValues[i] - lastWheelValues[i];
+        if(Math.abs(diff) < 0.001){
+          diff = 0;
+          wheelValues[i] = lastWheelValues[i];
+        }
+        distTraveled[i] = diff * encoderUnit;
+      }
+      
+      
+      //compute linear and angular velocity from how much wheels moved
+      double v=(distTraveled[0]+distTraveled[1])/2.0;
+      double w=(distTraveled[0]-distTraveled[1])/distBetweenWheels;
+      
+      double dt = 1;
+      robotPose[2] += (w*dt);
+      
+      double vx = v*Math.cos(robotPose[2]);
+      double vy = v*Math.sin(robotPose[2]);
+      
+      robotPose[0] += (vx*dt);
+      robotPose[1] += (vy*dt);
+      //System.out.println(robotPose[0]+" "+robotPose[1]+" "+robotPose[2]);
+      
+      // deciding if there are obstacles on the left and, or right
+      boolean right_obstacle =
+        psValues[0] > 80.0 ||
+        psValues[1] > 80.0;
+      boolean left_obstacle =
+        psValues[7] > 80.0 ||
+        psValues[6] > 80.0;
+      //System.out.println(right_obstacle+" "+left_obstacle);
+
+
+      //calculating direction in which to go
+      //robotPose[2] =(robotPose[2]+(2*Math.PI))%(2*Math.PI);
+      retDir = Math.atan(robotPose[1]/robotPose[0]);
+      //retDir=(retDir+(2*Math.PI))%(2*Math.PI);
+      //System.out.println(retDir+" "+robotPose[2]);
+
+      
+      //  deciding if to stop or turn away from obstacle or go forward
+      if(robotPose[0] > -returnPointEpsilon &&
+        robotPose[0] < returnPointEpsilon &&
+        robotPose[1] > -returnPointEpsilon &&
+        robotPose[1] < returnPointEpsilon){
+          leftMotor.setVelocity(0);
+          rightMotor.setVelocity(0);
+          break;
+      }else if(left_obstacle||right_obstacle || closeToObsticle>0){//avoidingObsticles
+        if(closeToObsticle<1)
+          closeToObsticle = 30;
+        leftMotor.setVelocity(0.5*MAX_SPEED);
+        rightMotor.setVelocity(0.5*MAX_SPEED);
+        if (left_obstacle) {
+          // turn right
+          leftMotor.setVelocity(0.5*MAX_SPEED);
+          rightMotor.setVelocity(-0.5*MAX_SPEED);
+        }
+        else if (right_obstacle) {
+           // turn left
+           leftMotor.setVelocity(-0.5*MAX_SPEED);
+           rightMotor.setVelocity(0.5*MAX_SPEED);         
+         }
+         closeToObsticle--;
+      }else if(!((retDir+retDirEpsilon>robotPose[2])&&(retDir-retDirEpsilon<robotPose[2]))){//turning to target
+          if((retDir-robotPose[2])>0){
+            //turn right
+            leftMotor.setVelocity(0.1*MAX_SPEED);
+            rightMotor.setVelocity(-0.1*MAX_SPEED);
+          }else{
+            //turn left
+            leftMotor.setVelocity(-0.1*MAX_SPEED);
+            rightMotor.setVelocity(0.1*MAX_SPEED);
+          } 
+       }else{
+         //go straight
+         leftMotor.setVelocity(0.5*MAX_SPEED);
+         rightMotor.setVelocity(0.5*MAX_SPEED);
+      }
+      
+
+      //update wheel values
+      for(int i = 0; i < 2; i++){
+        lastWheelValues[i] = wheelValues[i];
+      }
+    };
+    
+    leftMotor.setVelocity(0);
+    rightMotor.setVelocity(0);
+
+    while (robot.step(TIME_STEP) != -1) {
+    };
     // Enter here exit cleanup code.
   }
   
@@ -175,9 +355,8 @@ public class EPuckShortestPathRightCorners {
     int[][] matrix = new int[64][64];
     int x=0, y=0;
 
-    try
-    {
-    BufferedReader in = new BufferedReader(new FileReader("D:\\Stud\\4-1\\robotai\\map_to_read.txt"));    //reading files in specified directory
+    try {
+    BufferedReader in = new BufferedReader(new FileReader("D:\\Stud\\4-1\\robotai\\project\\RobotProject\\map_to_read.txt"));    //reading files in specified directory
   
       String line;
       while ((line = in.readLine()) != null)    //file reading
@@ -203,7 +382,7 @@ public class EPuckShortestPathRightCorners {
    // A utility function to print the constructed distance array
   static void printSolution(int dist[], int n)
   {
-    System.out.println("Vertex   Distance from Source");
+    //System.out.println("Vertex   Distance from Source");
     for (int i = 0; i < V; i++)
       System.out.println(i + " tt " + dist[i]);
   }
