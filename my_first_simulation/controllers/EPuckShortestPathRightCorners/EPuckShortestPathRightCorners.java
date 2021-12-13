@@ -54,10 +54,12 @@ public class EPuckShortestPathRightCorners {
     // get the motor devices
     Motor leftMotor = robot.getMotor("left wheel motor");
     Motor rightMotor = robot.getMotor("right wheel motor");
-    
+    leftMotor.setPosition(Double.POSITIVE_INFINITY);
+    rightMotor.setPosition(Double.POSITIVE_INFINITY);
+
     // set the target position of the motors
-    leftMotor.setVelocity(0.5 * MAX_SPEED);
-    rightMotor.setVelocity(0.5 * MAX_SPEED);
+    leftMotor.setVelocity(0);
+    rightMotor.setVelocity(0);
 
     var left_ps = robot.getPositionSensor("left wheel sensor");
     left_ps.enable(TIME_STEP);
@@ -90,12 +92,15 @@ public class EPuckShortestPathRightCorners {
     double forward = 6.24;
     double turn = 2.4;
      
-    //start and resting squares
+    //start and resting squares -------------------------------------------
     int start = 17;
-    int finish = 49;
+    int finish = 6;
     
     //Epsilon for return
-    double returnPointEpsilon = 0.06;
+    double returnPointEpsilon = 0.03;
+    
+    //velocity
+    double motorVelocity = 0.1;
 
    //path algorithm
     //Map graph
@@ -114,7 +119,11 @@ public class EPuckShortestPathRightCorners {
     int botDir = 0;
     int step = 0;
     boolean turning = false;
-    
+    boolean forwarding = false;
+    double savedPose=0;
+    double[] savedDistTraveled = {0,0};
+    double errorInDirection = 0.02;
+    double errorInStepForward = 0.001;
     // Main loop:
     // - perform simulation steps until Webots is stopping the controller
     while (robot.step(TIME_STEP) != -1) {
@@ -150,89 +159,129 @@ public class EPuckShortestPathRightCorners {
       //System.out.println(robotPose[0]+" "+robotPose[1]+" "+robotPose[2]);
 
       // logic for moving towards rest spot acording to dijkstra commads
-      if(lastWheelValues[0]==wheelValues[0]&&lastWheelValues[1]==wheelValues[1] && turning){
-            leftMotor.setPosition(wheelValues[0]+forward);
-            rightMotor.setPosition(wheelValues[1]+forward);
-            turning = false;
-      } else if(lastWheelValues[0]==wheelValues[0]&&lastWheelValues[1]==wheelValues[1]){
-            if(step+1 == road.size())
-              break;
-            int stepDif = road.get(step+1)-road.get(step);
-            //System.out.println(stepDif+" "+botDir);
-            if(stepDif==1){
-              if(botDir==0){
-                leftMotor.setPosition(wheelValues[0]+forward);
-                rightMotor.setPosition(wheelValues[1]+forward);
-              }else if(botDir==1){
-                leftMotor.setPosition(wheelValues[0]-turn);
-                rightMotor.setPosition(wheelValues[1]+turn);
-                turning = true;
-              }else if(botDir==3){
-                leftMotor.setPosition(wheelValues[0]+turn);
-                rightMotor.setPosition(wheelValues[1]-turn);
-                turning = true;
-              }
-              botDir = 0;
-            }else if(stepDif==8){
-              if(botDir==1){
-                leftMotor.setPosition(wheelValues[0]+forward);
-                rightMotor.setPosition(wheelValues[1]+forward);
-              }else if(botDir==2){
-                leftMotor.setPosition(wheelValues[0]-turn);
-                rightMotor.setPosition(wheelValues[1]+turn);
-                turning = true;
-              }else if(botDir==0){
-                leftMotor.setPosition(wheelValues[0]+turn);
-                rightMotor.setPosition(wheelValues[1]-turn);
-                turning = true;
-               }
-               botDir = 1;
-            }else if(stepDif==-1){
-              if(botDir==2){
-                leftMotor.setPosition(wheelValues[0]+forward);
-                rightMotor.setPosition(wheelValues[1]+forward);
-              }else if(botDir==3){
-                leftMotor.setPosition(wheelValues[0]-turn);
-                rightMotor.setPosition(wheelValues[1]+turn);
-                turning = true;
-              }else if(botDir==1){
-                leftMotor.setPosition(wheelValues[0]+turn);
-                rightMotor.setPosition(wheelValues[1]-turn);
-                turning = true;
-              }              
-              botDir = 2;
-            }else if(stepDif==-8){
-              if(botDir==3){
-                leftMotor.setPosition(wheelValues[0]+forward);
-                rightMotor.setPosition(wheelValues[1]+forward);
-              }else if(botDir==0){
-                leftMotor.setPosition(wheelValues[0]-turn);
-                rightMotor.setPosition(wheelValues[1]+turn);
-                turning = true;
-              }else if(botDir==2){
-                leftMotor.setPosition(wheelValues[0]+turn);
-                rightMotor.setPosition(wheelValues[1]-turn);
-                turning = true;
-              }
-              botDir = 3;
-            }
-            step++;
+      if(turning){
+        //System.out.println(Math.PI/2+" "+robotPose[2]);
+        if((savedPose+(0.17+Math.PI/2)+errorInDirection>robotPose[2]&&
+            savedPose+(0.17+Math.PI/2)-errorInDirection<robotPose[2])||
+            (savedPose-(0.17+Math.PI/2)+errorInDirection>robotPose[2]&&
+            savedPose-(0.17+Math.PI/2)-errorInDirection<robotPose[2])){
+          turning = false;
+          leftMotor.setVelocity(motorVelocity * MAX_SPEED);
+          rightMotor.setVelocity(motorVelocity * MAX_SPEED);
+          savedDistTraveled[0] = robotPose[0];
+          savedDistTraveled[1] = robotPose[1];
+          //System.out.println("Turn Done");
+          }
+      } else if(forwarding){
+        //System.out.println(robotPose[0]+" "+robotPose[1]);        
+        if((savedDistTraveled[0]+0.125+errorInStepForward>robotPose[0]&&
+           savedDistTraveled[0]+0.125-errorInStepForward<robotPose[0])||
+           (savedDistTraveled[1]+0.125+errorInStepForward>robotPose[1]&&
+           savedDistTraveled[1]+0.125-errorInStepForward<robotPose[1])||
+           (savedDistTraveled[0]-0.125+errorInStepForward>robotPose[0]&&
+           savedDistTraveled[0]-0.125-errorInStepForward<robotPose[0])||
+           (savedDistTraveled[1]-0.125+errorInStepForward>robotPose[1]&&
+           savedDistTraveled[1]-0.125-errorInStepForward<robotPose[1])){
+          leftMotor.setVelocity(0);
+          rightMotor.setVelocity(0);
+          forwarding = false;
+          //System.out.println("Forward Done");
+        }
+      }else {
+        if(step+1 == road.size()){
+          //System.out.println("Dijkstra movement done");
+          break;
+        }
+        int stepDif = road.get(step+1)-road.get(step);
+        savedPose=robotPose[2];
+        savedDistTraveled[0] = robotPose[0];
+        savedDistTraveled[1] = robotPose[1];
+  
+        //System.out.println(stepDif+" "+botDir);
+        if(stepDif==1){
+          if(botDir==0){
+            leftMotor.setVelocity(motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(motorVelocity * MAX_SPEED);
+            forwarding = true;
+          }else if(botDir==1){
+            leftMotor.setVelocity(-motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(motorVelocity * MAX_SPEED);
+            forwarding = true;
+            turning = true;
+          }else if(botDir==3){
+            leftMotor.setVelocity(motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(-motorVelocity * MAX_SPEED);
+            forwarding = true;
+            turning = true;
+          }
+          botDir = 0;
+        }else if(stepDif==8){
+          if(botDir==1){
+            leftMotor.setVelocity(motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(motorVelocity * MAX_SPEED);
+            forwarding = true;
+          }else if(botDir==2){
+            leftMotor.setVelocity(-motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(motorVelocity * MAX_SPEED);
+            forwarding = true;
+            turning = true;
+          }else if(botDir==0){
+            leftMotor.setVelocity(motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(-motorVelocity * MAX_SPEED);
+            forwarding = true;
+            turning = true;
+           }
+           botDir = 1;
+        }else if(stepDif==-1){
+          if(botDir==2){
+            leftMotor.setVelocity(motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(motorVelocity * MAX_SPEED);
+            forwarding = true;
+          }else if(botDir==3){
+            leftMotor.setVelocity(-motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(motorVelocity * MAX_SPEED);
+            forwarding = true;
+            turning = true;
+          }else if(botDir==1){
+            leftMotor.setVelocity(motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(-motorVelocity * MAX_SPEED);
+            forwarding = true;
+            turning = true;
+          }              
+          botDir = 2;
+        }else if(stepDif==-8){
+          if(botDir==3){
+            leftMotor.setVelocity(motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(motorVelocity * MAX_SPEED);
+            forwarding = true;
+          }else if(botDir==0){
+            leftMotor.setVelocity(-motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(motorVelocity * MAX_SPEED);
+            forwarding = true;
+            turning = true;
+          }else if(botDir==2){
+            leftMotor.setVelocity(motorVelocity * MAX_SPEED);
+            rightMotor.setVelocity(-motorVelocity * MAX_SPEED);
+            forwarding = true;
+            turning = true;
+          }
+          botDir = 3;
+        }
+        step++;
       }
       for(int i = 0; i < 2; i++){
         lastWheelValues[i] = wheelValues[i];
       }
     };
-    //waiting for ~10 seconds
+    //waiting for ~10 seconds------------------------------------------------
+    //*
     int breaktime =0;
     while (robot.step(TIME_STEP) != -1) {
       if(breaktime>TIME_STEP*2.5)
         break;
       breaktime++;
-    };
+    };//*/
 
-    //allowing motors to turn to infinity
-    leftMotor.setPosition(Double.POSITIVE_INFINITY);
-    rightMotor.setPosition(Double.POSITIVE_INFINITY);
    
     // stopping motors temporarily.
     leftMotor.setVelocity(0);
@@ -275,7 +324,7 @@ public class EPuckShortestPathRightCorners {
       
       robotPose[0] += (vx*dt);
       robotPose[1] += (vy*dt);
-      //System.out.println(robotPose[0]+" "+robotPose[1]+" "+robotPose[2]);
+      System.out.println(robotPose[0]+" "+robotPose[1]+" "+robotPose[2]);
       
       // deciding if there are obstacles on the left and, or right
       boolean right_obstacle =
@@ -284,14 +333,17 @@ public class EPuckShortestPathRightCorners {
       boolean left_obstacle =
         psValues[7] > 80.0 ||
         psValues[6] > 80.0;
-      //System.out.println(right_obstacle+" "+left_obstacle);
+      System.out.println(right_obstacle+" "+left_obstacle);
 
 
       //calculating direction in which to go
-      //robotPose[2] =(robotPose[2]+(2*Math.PI))%(2*Math.PI);
       retDir = Math.atan(robotPose[1]/robotPose[0]);
-      //retDir=(retDir+(2*Math.PI))%(2*Math.PI);
-      //System.out.println(retDir+" "+robotPose[2]);
+      if(robotPose[0]>0)
+        retDir = retDir+Math.PI;
+      
+      retDir=(retDir+(2*Math.PI))%(2*Math.PI);
+      robotPose[2] =(robotPose[2]+(2*Math.PI))%(2*Math.PI);
+      System.out.println(retDir+" "+robotPose[2]);
 
       
       //  deciding if to stop or turn away from obstacle or go forward
@@ -318,7 +370,8 @@ public class EPuckShortestPathRightCorners {
            rightMotor.setVelocity(0.5*MAX_SPEED);         
          }
          closeToObsticle--;
-      }else if(!((retDir+retDirEpsilon>robotPose[2])&&(retDir-retDirEpsilon<robotPose[2]))){//turning to target
+      }else if(!((retDir+retDirEpsilon>robotPose[2])&&
+                 (retDir-retDirEpsilon<robotPose[2]))){//turning to target
           if((retDir-robotPose[2])>0){
             //turn right
             leftMotor.setVelocity(0.1*MAX_SPEED);
